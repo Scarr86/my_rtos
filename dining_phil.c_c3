@@ -1,0 +1,195 @@
+#include "contiki.h" //system
+#include <stdlib.h> //for rand()
+#include <stdio.h>  //for printf()
+
+PROCESS(dining_phils, "dining_phil");
+
+typedef enum {
+  THINK, WAIT, EAT
+} state_tt; // phil state
+
+#define FREE_FORK -1
+
+//struct phils {
+//  struct etimer t;//timer;
+//  state_tt s;//state;
+//  int f;//fork;
+//};
+//static struct phils phil[10];
+
+static const char* yx[] = {"20;23","10;16","3;35","10;54","20;47", NULL};
+static struct etimer timer[10];
+static state_tt state[10];
+static int forks[10];
+static int num_of_phil;
+
+process_event_t table_ev; //broadcast 
+
+/*-------------------------------------*/
+static int
+right(int id)
+{
+  return id;
+}
+
+/*-------------------------------------*/
+static int
+left(int id)
+{
+  id++;
+  if(id >= num_of_phil) {id = 0;}
+  return id;
+}
+
+/*-------------------------------------*/
+static void
+some_wait(int id)
+{
+  int any_wait = 2048 + ((id) << 8) + (rand() & 511);
+  etimer_set(&timer[id], any_wait);
+}
+
+/*-------------------------------------*/
+static void
+get_forks(int id)
+{
+  forks[left(id)] = forks[right(id)] = id;
+}
+
+/*-------------------------------------*/
+static void
+put_forks(int id)
+{
+  forks[left(id)] = forks[right(id)] = FREE_FORK;
+  process_post(&dining_phils, table_ev, NULL);//update_waiting_phil();
+}
+
+/*-------------------------------------*/
+static int
+forks_is_free(int id)
+{
+  return (forks[left(id)] == FREE_FORK) && (forks[right(id)] == FREE_FORK);
+}
+
+/*-------------------------------------*/
+static void
+to_think(int id)
+{
+  put_forks(id);
+  state[id] = THINK;
+  some_wait(id);
+}
+
+/*-------------------------------------*/
+static void
+to_eat(int id)
+{
+  if(forks_is_free(id) == 0) {
+    state[id] = WAIT;
+
+  } else {
+    get_forks(id);
+    state[id] = EAT;
+    some_wait(id);
+  }
+}
+
+/*-------------------------------------*/
+static void
+update_waiting_phil(void)
+{
+  for(int id = 0; id < num_of_phil; id++) {
+    if(state[id] == WAIT) { to_eat(id); }
+  }
+}
+
+/*-------------------------------------*/
+static void
+init_all_phil(int data)
+{
+  table_ev = process_alloc_event();
+
+  if(data == 5) { /* :-/ */
+    num_of_phil = data;
+    for(int id = 0; id < num_of_phil; id++) { to_think(id); }
+
+  } else {
+    printf("\r\n \e[31merror:\e[33m '%s' out of memory\n\r", PROCESS_CURRENT()->name);
+    process_exit(PROCESS_CURRENT());
+  }
+
+}
+
+/*-------------------------------------*/
+static void
+display_phil(int id)
+{
+  switch(state[id]) {
+    case THINK:printf("\e[%sH\e[36m %d: THINKING \n", yx[id], id+1); break;
+    case WAIT: printf("\e[%sH\e[31m %d: WAITING  \n", yx[id], id+1); break;
+    case EAT:  printf("\e[%sH\e[32m %d: EATING   \n", yx[id], id+1); break;
+    default:break;
+  }
+}
+
+/*-------------------------------------*/
+static void
+display_state(void)
+{
+  printf("\e[s"); //store cursor
+  for(int id = 0; id < num_of_phil; id++) { display_phil(id); }
+  printf("\e[u"); //restore cursor
+}
+
+/*-------------------------------------*/
+static void
+philosopher(int id)
+{
+  switch(state[id]) {
+    case THINK: to_eat(id);    break;
+    case EAT:   to_think(id);  break;
+    default:break;
+  }
+}
+
+/*-------------------------------------*/
+static void
+ev_dispatch(process_event_t ev, void*data)
+{
+  if(ev == PROCESS_EVENT_TIMER) {
+
+    for(int id = 0; id < num_of_phil; id++) {
+      if((struct etimer*)data == &timer[id]) { philosopher(id); }
+    }
+  }
+
+  if(ev == table_ev) { update_waiting_phil(); }
+  if(ev == PROCESS_EVENT_INIT) { init_all_phil((int)data); }
+}
+
+/*-------------------------------------*/
+PROCESS_THREAD(dining_phils, ev, data)
+{
+  ev_dispatch(ev, data);
+  PROCESS_BEGIN()
+
+    while (1) {
+      display_state();
+      PROCESS_WAIT_EVENT();
+    }
+
+  PROCESS_END()
+}
+
+///*-------------------------------------*/
+//void
+//main(void)
+//{
+//  hw_init(); //hw init
+//  process_init(); //sys init
+//  process_start(&etimer_process, NULL);
+//  process_start(&dining_phils, (void*) 5); //only five today
+//  while (1) { process_run(); }
+//}
+
+/* EOF */

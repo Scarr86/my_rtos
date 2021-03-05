@@ -8,37 +8,42 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <stdlib.h>
-#include "ringbuf.h"
-#include "uart.h"
+#include "app.h"
+//#include "appEtimer.h"
+//#include "appS1FLBI.h"
+#include "appPhil.h"
 
-int randRange( int from, int to){
+
+//Application app;
+//AppEtimer appEtimer;
+//AppS1FLBI appS1FLBI;
+AppPhil appPhil;
+
+int randRange( uint16_t from, uint16_t to){
 	 return from + (rand() % (to - from + 1));
 }
-
-RingBuf<uint8_t, 8> a;
-
-Uart uart0(0);
-Uart uart1(1);
-
-//Uart* u0 =  Uart::u0;
-//Uart* u1 =  Uart::u1;
+ uint16_t calc(uint16_t a, uint16_t b, uint16_t (*opt)(uint16_t a, uint16_t b) ){
+	 return opt(a,b);
+ }
+ 
 
 
-	
 int main(void)
-{
-		//a.push(1);
-		//uart0.write();
-		uart0.begin();
-		uart1.begin();
-		while (1)
-    {
-			//uart0.write(uart0.read());
-			uart1.write(uart1.read());
-			//PORTA = randRange(1, 3);
-			//PORTA = a.pop();
-			//PORTA = uart0.read();
-		}
+{	
+	//refApp = app;
+	//refApp = appEtimer;
+	Application &refApp = appPhil;
+	
+	//uint16_t v = 0x2;
+	//auto lamda{[v](uint16_t a, uint16_t b)->uint16_t{return a+b + v;}};
+	//PORTB = lamda(2,3);
+	//PORTA =  calc(0x40, 0x2, [](uint16_t a, uint16_t b)-> uint16_t{ return a + b;})	;
+
+	refApp.init();
+	while (1)
+  {
+		refApp.run();
+	}
 }
 
 

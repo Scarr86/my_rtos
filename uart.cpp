@@ -22,7 +22,6 @@ Uart::Uart(const uint8_t port){
 		  UCSRnC = &UCSR1C;
 			UBRRnH = &UBRR1H;
 		  UBRRnL = &UBRR1L;
-			this->port = &PORTB;
 			u1 = this;
 		}
 		break;
@@ -34,7 +33,6 @@ Uart::Uart(const uint8_t port){
 				UCSRnC = &UCSR0C;
 				UBRRnH = &UBRR0H;
 				UBRRnL = &UBRR0L;
-				this->port = &PORTA;
 				u0 = this;
 			}
 		break;
@@ -43,34 +41,33 @@ Uart::Uart(const uint8_t port){
 }
 
 void Uart::write(uint8_t data){
-	/* ќжидание освобождени€ буфера передатчика */
-	while(!(*UCSRnA & (1 << UDRE)))
+	while(output.isFull())
 	;
-	*UDRn =  data;
+	output.push(data);
+	*(this->UCSRnB) |= (1 << UDRIE);
 }
 
-void	Uart::write(const uint8_t* buf){
+void Uart::write(const uint8_t* buf, uint16_t len){
+	const uint8_t* start = buf;
+	while((uint16_t)(buf - start) < len){
+		write(*buf++);		
+	}
 }
 
 uint16_t Uart::read(){
 	/* ќжидание данных дл€ приема */
-	while(!(*UCSRnA & (1 << RXC)))
-	;
-	return *UDRn;
+	//while(!(*UCSRnA & (1 << RXC)))
+	//;
+	//return *UDRn;	
+	if(input.isEmpty())
+		return -1;
+	else
+		return input.pop();
 }
 
-void Uart::begin(	uint32_t baud,
-									USARTOperatingMode mode,
-									USARTParity parity ,
-									USARTStopBits stopBits,
-									USARTFrameLength frameLength ){
-	//this->setParity(parity);
-	//this->setStopBit(stopBits);
-	//this->setFrameLength(frameLength);
-	////this->flushBuffer();
-	///* Enable receiver and transmitter */
-	//*(this->UCSRnB) = (1 << RXEN) | (1 << TXEN) | ( 1 << RXCIE);
-	//this->setOpMode(baud, mode);
+
+
+void Uart::begin(){
 	#if defined (UBRR0H) &&  defined (UBRR1H)
 	*UBRRnH =  UBRRH_VALUE;
 	*UBRRnL = UBRRL_VALUE;
@@ -79,11 +76,58 @@ void Uart::begin(	uint32_t baud,
 	#endif
 	cli();
 	// 	enable RX and TX and set interrupts on rx complete
-	*UCSRnB = (1 << RXEN) | (1 << TXEN) | (0 << RXCIE) | (0 << TXCIE);
+	*UCSRnB = (1 << RXEN) | (1 << TXEN) | (1 << RXCIE) | (1 << TXCIE);
 	// 	8-bit, 1 stop bit, no parity, asynchronous UART
 	*UCSRnC = (1 << UCSZ0) | (1 << UCSZ1);
+	//output.clear();
+	//input.clear();
 	sei();
 }
-	
-void Uart::setOpMode(uint32_t baud, USARTOperatingMode mode){
+
+void Uart::hdrUDREI(){
+	*UDRn = output.pop();
+	if(output.isEmpty()){
+		*UCSRnB &= ~(1 << UDRIE);
+	}
+}
+
+void Uart::hdrRXI(){
+	register uint8_t c = *UDRn; 
+	register uint8_t error = *UCSRnA;
+	if(error & (_BV(FE) | _BV(DOR))){
+		/*ERROR rx frame error or data overflow*/
+	}
+	if(input.isFull()){
+		/* ERROR input buffer overflow */
+	}
+	else{
+		input.push(c);
+	}
+}
+
+void Uart::hdrTXI()
+{
+	DDRC = 0xff;
+	PORTC ^= 0xff;
+}
+
+ISR (USART0_UDRE_vect){
+	Uart::u0->hdrUDREI();
+}
+ISR (USART1_UDRE_vect){
+	Uart::u1->hdrUDREI();
+}
+
+ISR(USART0_TX_vect){
+	Uart::u0->hdrTXI();
+}
+ISR(USART0_RX_vect){
+	Uart::u0->hdrRXI();
+}
+
+ISR(USART1_TX_vect){
+	//Uart::u1->hdrTXI();
+}
+ISR(USART1_RX_vect){
+	Uart::u1->hdrRXI();
 }
